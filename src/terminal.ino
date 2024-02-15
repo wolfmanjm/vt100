@@ -1,9 +1,10 @@
 #include <SPI.h>
 #include <RA8875.h>
 #include "tinyflash.h"
+#include <EEPROM.h>
 
 //#define TEST
-#define DEBUG 1
+//#define DEBUG
 #define LED 13
 
 #define FW_SOURCE_LEN 5478
@@ -46,13 +47,13 @@ void load_touch_fw()
 {
     gsl_setup();
 
-#if DEBUG == 1
+#ifdef DEBUG
     Serial.println("Loading Touch FIRMWARE");
 #endif
 
     tft.println("Loading Touch FIRMWARE...");
     if(!flash.beginRead(0)) {
-#if DEBUG == 1
+#ifdef DEBUG
         Serial.println("beginread failed");
 #endif
         tft.println("flash read failed");
@@ -76,7 +77,7 @@ void load_touch_fw()
         gsl_load_fw(addr, buf);
     }
     flash.endRead();
-#if DEBUG == 1
+#ifdef DEBUG
     Serial.println("Touch Firmware loaded ok");
 #endif
     tft.println("...Loaded Touch FIRMWARE");
@@ -85,38 +86,68 @@ void load_touch_fw()
 
 int baudrate = 9600;
 int rotation = 0; // 1 is portrait
+int font_size = 0;
+uint16_t text_color = RA8875_GREEN;
 
 void setup()
 {
-#if DEBUG == 1
+#ifdef DEBUG
     Serial.begin (115200);   // debugging
     // wait up to 5 seconds for Arduino Serial Monitor
     unsigned long startMillis = millis();
     while (!Serial && (millis() - startMillis < 5000)) ;
-    Serial.println("Starting Terminal. Baud 115200");
+    Serial.println("Starting Terminal.");
 #endif
 
-    Serial1.setRX(0);
-    Serial1.setTX(1);
+    // read config settings stored in eeprom
+    // first time settings are set will write the defaults and any changes
+    uint8_t value = EEPROM.read(0);
+    if(value == 0xA5) {
+        // configs have been stored
+        value= EEPROM.read(1);
+        switch(value) {
+            case 0: baudrate = 1200; break;
+            case 1: baudrate = 2400; break;
+            case 2: baudrate = 4800; break;
+            case 3: baudrate = 9600; break;
+            case 4: baudrate = 19200; break;
+            case 5: baudrate = 115200; break;
+            default: baudrate = 9600; break;
+        }
+        rotation = EEPROM.read(2);
+        font_size = EEPROM.read(3);
+        text_color = (EEPROM.read(5) << 8) | EEPROM.read(4);
+    }
+#ifdef DEBUG
+    else {
+        Serial.println("No settings found in EEPROM");
+    }
+#endif
+
+    Serial1.setRX(3);
+    Serial1.setTX(4);
     Serial1.begin(baudrate, SERIAL_8N1); // for I/O
+    // Serial1.println("Hello world!");
 
     tft.begin(RA8875_800x480);
     tft.setRotation(rotation);
 
-
-    tft.setFontScale(0); //font x1
+    tft.setFontScale(font_size); //font x1
 
     screen_width = tft.width();
     screen_height = tft.height();
     char_width = tft.getFontWidth();
     char_height = tft.getFontHeight();
 
+#ifdef DEBUG
+    Serial.printf("Screen width: %u, height: %u\n", screen_width, screen_height);
+    Serial.printf("Font width: %u, height: %u\n", char_width, char_height);
+    Serial.printf("Line lengths: %u x %u\n", screen_width / char_width, screen_height / char_height);
+#endif
+
     tft.printf("Screen width: %u, height: %u\n", screen_width, screen_height);
     tft.printf("Font width: %u, height: %u\n", char_width, char_height);
-    tft.printf("character size: %u x %u\n", screen_width/char_width, screen_height/char_height);
-
-    // set scroll window to entire screen
-    //tft.setScrollWindow(0, screen_width - 1, 0, screen_height - 1);
+    tft.printf("Line lengths: %u x %u\n", screen_width / char_width, screen_height / char_height);
 
     tft.showCursor(UNDER, true);
 
@@ -126,14 +157,16 @@ void setup()
     pinMode(LED, OUTPUT);
     digitalWrite(LED, 0);
     capacity = flash.begin();
+#ifdef DEBUG
     Serial.println(capacity);     // Chip size to host
+#endif
     if(capacity > 0) {
         digitalWrite(LED, 1);
         load_touch_fw();
         has_touch = true;
 
     } else {
-#if DEBUG == 1
+#ifdef DEBUG
         Serial.println("Bad flash");
 #endif
         tft.println("Unable to setup Flash");
@@ -141,11 +174,12 @@ void setup()
         has_touch = false;
     }
 
-
     // set text color to green
-    tft.setTextColor(RA8875_GREEN);
+    tft.setTextColor(text_color);
     tft.setCursor(0, 0);
     tft.fillWindow(RA8875_BLACK); //fill window black
+    tft.sleep(false);
+    tft.displayOn(true);
 
 #if 0
     tft.println("Once upon a midnight dreary, while I pondered, weak and weary,");
@@ -210,8 +244,19 @@ bool last_finger_down[5] = {false};
 // wait for char and return it
 char getcharw()
 {
-    while (!Serial.available()) ;
-    return Serial.read();
+#ifdef DEBUG
+    while(true) {
+        if (Serial1.available()) {
+            return Serial1.read();
+        }
+        if (Serial.available()) {
+            return Serial.read();
+        }
+    }
+#else
+    while (!Serial1.available()) ;
+    return Serial1.read();
+#endif
 }
 
 void clearScreen()
@@ -223,7 +268,7 @@ void scroll_up()
 {
     tft.BTE_move(0, char_height, screen_width, screen_height - char_height, 0, 0);
     delay(100);
-    tft.fillRect(0, screen_height-char_height, screen_width, char_height, RA8875_BLACK);
+    tft.fillRect(0, screen_height - char_height, screen_width, char_height, RA8875_BLACK);
 }
 
 void scroll_down()
@@ -245,10 +290,10 @@ void process(char data)
     } else if (data == '\n') {
         // next line, potentially scroll
         tft.getCursor(currentX, currentY);
-        int16_t y= currentY + char_height;
+        int16_t y = currentY + char_height;
         if(y >= screen_height) {
             scroll_up();
-            y= screen_height - char_height;
+            y = screen_height - char_height;
         }
         tft.setCursor(currentX, y);
 
@@ -282,6 +327,11 @@ void process(char data)
                     serInChar = getcharw();
                 }
             }
+
+            #ifdef DEBUG
+            Serial.printf("Esc[ escP1: %d, escP2: %d, %c\n", escParam1, escParam2, serInChar);
+            #endif
+
             // Esc[line;ColumnH or Esc[line;Columnf moves cursor to that coordinate
             if (serInChar == 'H' || serInChar == 'f') {
                 if (escParam1 > 0) {
@@ -296,8 +346,8 @@ void process(char data)
             }
             //Esc[J=clear from cursor down, Esc[1J=clear from cursor up, Esc[2J=clear complete screen
             else if (serInChar == 'J') {
+                tft.getCursor(currentX, currentY);
                 if (escParam1 == 0) {
-                    tft.getCursor(currentX, currentY);
                     if(currentX != 0) {
                         // clear to end of line
                         int16_t x = currentX;
@@ -311,7 +361,6 @@ void process(char data)
                     tft.fillRect(0, y, screen_width, screen_height - y, RA8875_BLACK);
 
                 } else if (escParam1 == 1) {
-                    tft.getCursor(currentX, currentY);
                     if(currentX != 0) {
                         // clear to start of line
                         int16_t y = currentY;
@@ -321,7 +370,7 @@ void process(char data)
                     }
                     // clear to start of screen
                     int16_t y = currentY - char_height;
-                    tft.fillRect(0, 0, screen_width, y - char_height, RA8875_BLACK);
+                    tft.fillRect(0, 0, screen_width, y, RA8875_BLACK);
 
                 } else if (escParam1 == 2) {
                     clearScreen();
@@ -329,6 +378,7 @@ void process(char data)
             }
             // Esc[K = erase to end of line, Esc[1K = erase to start of line
             else if (serInChar == 'K') {
+                tft.getCursor(currentX, currentY);
                 if (escParam1 == 0) {
                     // clear to end of line
                     int16_t x = currentX;
@@ -371,7 +421,7 @@ void process(char data)
 void loop()
 {
     char data;
-#if DEBUG == 1
+#ifdef DEBUG
     while (Serial.available()) {
         data = Serial.read();
         process(data);
