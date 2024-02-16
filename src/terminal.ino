@@ -267,14 +267,14 @@ void clearScreen()
 void scroll_up()
 {
     tft.BTE_move(0, char_height, screen_width, screen_height - char_height, 0, 0);
-    delay(100);
+    delay(50);
     tft.fillRect(0, screen_height - char_height, screen_width, char_height, RA8875_BLACK);
 }
 
 void scroll_down()
 {
     tft.BTE_move(screen_width - 1, screen_height - char_height - 1, screen_width, screen_height - char_height, screen_width - 1, screen_height - 1, 0, 0, false, RA8875_BTEROP_SOURCE, false, true);
-    delay(100);
+    delay(50);
     tft.fillRect(0, 0, screen_width, char_height, RA8875_BLACK);
 }
 
@@ -296,6 +296,11 @@ void process(char data)
             y = screen_height - char_height;
         }
         tft.setCursor(currentX, y);
+
+    } else if (data == 8) { // BS
+        // backspace move cursor left one
+        tft.getCursor(currentX, currentY);
+        tft.setCursor(currentX-char_width, currentY);
 
     } else if (data == 27) { // ESC
         //If it is an escape character then get the following characters to interpret
@@ -332,8 +337,62 @@ void process(char data)
             Serial.printf("Esc[ escP1: %d, escP2: %d, %c\n", escParam1, escParam2, serInChar);
             #endif
 
+            if(serInChar >= 'A' && serInChar <= 'G') {
+                // Handle cursor incremental move commands
+                tft.getCursor(currentX, currentY);
+                int16_t x= currentX, y= currentY;
+                if (escParam1 < 1) escParam1= 1;
+                switch(serInChar) {
+                    case 'A':
+                        // Esc[nA moves cursor up n lines
+                        y = currentY - (escParam1 * char_height);
+                        if(y < 0) y= 0;
+                        break;
+
+                    case 'B':
+                        // Esc[nB moves cursor down n lines
+                        y = currentY + (escParam1 * char_height);
+                        if(y >= screen_height) y= screen_height - char_height;
+                        break;
+
+                    case 'C':
+                        // Esc[nC moves cursor right n characters
+                        x = currentX + (escParam1 * char_width);
+                        if(x >= screen_width) x= screen_width - char_width;
+                        break;
+
+                    case 'D':
+                        // Esc[nD moves cursor left n characters
+                        x = currentX - (escParam1 * char_width);
+                        if(x < 0) x= 0;
+                        break;
+
+                    case 'E':
+                        // Esc[nE moves cursor to start of n next lines
+                        x= 0;
+                        y = currentY + (escParam1 * char_height);
+                        if(y >= screen_height) y= screen_height - char_height;
+                        break;
+
+                    case 'F':
+                        // Esc[nF moves cursor to start of n previous lines
+                        x= 0;
+                        y = currentY - (escParam1 * char_height);
+                        if(y < 0) y= 0;
+                        break;
+
+                    case 'G':
+                        // Esc[nG moves cursor to column n
+                        --escParam1;
+                        x = (escParam1 * char_width);
+                        if(x >= screen_width) x= screen_width - char_width;
+                        break;
+                }
+
+                tft.setCursor(x, y);
+            }
             // Esc[line;ColumnH or Esc[line;Columnf moves cursor to that coordinate
-            if (serInChar == 'H' || serInChar == 'f') {
+            else if (serInChar == 'H' || serInChar == 'f') {
                 if (escParam1 > 0) {
                     escParam1--;
                 }
@@ -393,18 +452,40 @@ void process(char data)
                     int16_t w = currentX;
                     int16_t h = char_height;
                     tft.fillRect(0, y, w, h, RA8875_BLACK);
+
+                } else if (escParam1 == 2) {
+                    // clear entire line
+                    int16_t y = currentY;
+                    int16_t w = screen_width;
+                    int16_t h = char_height;
+                    tft.fillRect(0, y, w, h, RA8875_BLACK);
                 }
 
             }
-            // Esc[L = scroll down
-            else if (serInChar == 'L') {
-                scroll_down();
+            // Esc[nT = scroll down. optional n is number of lines to scroll
+            else if (serInChar == 'T') {
+                if (escParam1 == 0) escParam1= 1;
+                for (int i = 0; i < escParam1; ++i) {
+                    scroll_down();
+                }
             }
-            // Esc[M = scroll up
-            else if (serInChar == 'M') {
-                scroll_up();
+            // Esc[nS = scroll up. optional n is number of lines to scroll
+            else if (serInChar == 'S') {
+                if (escParam1 == 0) escParam1= 1;
+                for (int i = 0; i < escParam1; ++i) {
+                    scroll_up();
+                }
             }
         } // end of in char = '['
+
+        // EscM scroll up
+        else if (serInChar == 'M') {
+            scroll_up();
+        }
+        // EscL scroll down
+        else if (serInChar == 'L') {
+            scroll_down();
+        }
     } // end of in char = 27
     else if (data > 31 && data < 128) {
         // display character, scroll if hit end of screen
