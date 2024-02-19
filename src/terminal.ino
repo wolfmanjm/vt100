@@ -88,6 +88,9 @@ int baudrate = 9600;
 int rotation = 0; // 1 is portrait
 int font_size = 0;
 uint16_t text_color = RA8875_GREEN;
+bool lfcrlf = true; // convert lf to crlf
+
+void kbd_setup();
 
 void setup()
 {
@@ -117,6 +120,7 @@ void setup()
         rotation = EEPROM.read(2);
         font_size = EEPROM.read(3);
         text_color = (EEPROM.read(5) << 8) | EEPROM.read(4);
+        lfcrlf = EEPROM.read(6) != 0;
     }
 #ifdef DEBUG
     else {
@@ -153,6 +157,9 @@ void setup()
 
     //now set a text color, background transparent
     tft.println("Starting up...");
+
+    // setup the micro keyboard
+    kbd_setup();
 
     pinMode(LED, OUTPUT);
     digitalWrite(LED, 0);
@@ -278,6 +285,10 @@ void scroll_down()
     tft.fillRect(0, 0, screen_width, char_height, RA8875_BLACK);
 }
 
+// extern
+char process_key(bool wait);
+bool local_echo= true;
+
 // do some basic VT100/ansi escape sequence handling
 void process(char data)
 {
@@ -290,17 +301,21 @@ void process(char data)
     } else if (data == '\n') {
         // next line, potentially scroll
         tft.getCursor(currentX, currentY);
+        int16_t x= currentX;
         int16_t y = currentY + char_height;
         if(y >= screen_height) {
             scroll_up();
             y = screen_height - char_height;
         }
-        tft.setCursor(currentX, y);
+        if(lfcrlf) x= 0; // if LF is converted to CRLF
+        tft.setCursor(x, y);
 
     } else if (data == 8) { // BS
         // backspace move cursor left one
         tft.getCursor(currentX, currentY);
-        tft.setCursor(currentX-char_width, currentY);
+        uint16_t x= currentX-char_width;
+        if(x < 0) x= 0;
+        tft.setCursor(x, currentY);
 
     } else if (data == 27) { // ESC
         //If it is an escape character then get the following characters to interpret
@@ -512,6 +527,16 @@ void loop()
     while (Serial1.available()) {
         data = Serial1.read();
         process(data);
+    }
+
+    // get a key from the keyboard
+    char c= process_key(false);
+    if(c != 0) {
+        Serial1.write(c);
+        if(local_echo) {
+            if(c < ' ' || c >= 0x80) tft.printf("\\x%02X", c);
+            else if(c >= ' ') tft.printf("%c", c);
+        }
     }
 
 #ifdef TEST
