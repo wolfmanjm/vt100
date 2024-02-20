@@ -7,6 +7,20 @@
 #define dcdPin 17
 #define rtsPin 16
 
+/*
+0x81, up
+0x82, down
+0x83, left
+0x84, right
+
+0x85, today
+0x86, inbox
+0x87, contacts
+0x88, calendar
+0x89, tasks
+0x8A, winkey
+*/
+
 #define CHARMAPSIZE 63
 PROGMEM static const uint8_t charmap[CHARMAPSIZE][3] = {
 {0x01, ']', '}'},
@@ -183,55 +197,61 @@ static bool caps = false;
 uint16_t process_key(bool wait)
 {
     uint8_t c;
-    if(wait) {
-        while(!get_key(c)) ; // block wait for key
+    bool done= false;
 
-    }else{
-        if(!get_key(c)) return 0;
-    }
+    do {
+        if(wait) {
+            while(!get_key(c)) ; // block wait for key
 
-    // process modifiers keys
-    if(c == 0x3F) shift = true;
-    else if(c == 0x7F) ctrl = true;
-    else if(c == 0xDF) alt = true;
-    else if(c == 0xBF) fn = true;
-    else if(c == 0xC6) shift = false;
-    else if(c == 0x86) ctrl = false;
-    else if(c == 0x26) alt = false;
-    else if(c == 0x46) fn = false;
-    else if(c == 0x69) caps = !caps;
-
-    else if(c == 0x5E) {
-        // released normal key
-
-    } else {
-        // Serial.printf("keycode= %02X", c);
-        // Serial.printf(" - shift:%d, ctrl:%d, alt:%d, fn:%d, caps:%d\n",
-        //               shift, ctrl, alt, fn, caps);
-
-        uint8_t a = 0;
-        int i = binary_search(c);
-        if(i != -1) {
-            if(shift) {
-                a = charmap[i][2];
-                if(a == 0) a= charmap[i][1]; // if no shift just use regular char
-
-            } else {
-                a = charmap[i][1];
-                if(ctrl) {
-                    // convert to control character
-                    if(a >= 'a' && a <= '}') a = a - 96;
-                }
-            }
+        }else{
+            if(!get_key(c)) return 0;
         }
 
-        uint8_t mods = 0;
-        if(shift) mods |= 1;
-        if(ctrl) mods |= 2;
-        if(alt) mods |= 4;
-        if(fn) mods |= 8;
-        return (mods<<8) | a;
-    }
+        // process modifiers keys
+        if(c == 0x3F) shift = true;
+        else if(c == 0x7F) ctrl = true;
+        else if(c == 0xDF) alt = true;
+        else if(c == 0xBF) fn = true;
+        else if(c == 0xC6) shift = false;
+        else if(c == 0x86) ctrl = false;
+        else if(c == 0x26) alt = false;
+        else if(c == 0x46) fn = false;
+        else if(c == 0x69) caps = !caps;
+
+        else if(c == 0x5E) {
+            // released normal key
+            continue;
+
+        } else {
+            // Serial.printf("keycode= %02X", c);
+            // Serial.printf(" - shift:%d, ctrl:%d, alt:%d, fn:%d, caps:%d\n",
+            //               shift, ctrl, alt, fn, caps);
+
+            uint8_t a = 0;
+            int i = binary_search(c);
+            if(i != -1) {
+                if(shift) {
+                    a = charmap[i][2];
+                    if(a == 0) a= charmap[i][1]; // if no shift just use regular char
+
+                } else {
+                    a = charmap[i][1];
+                    if(ctrl) {
+                        // convert to control character
+                        if(a >= 'a' && a <= '}') a = a - 96;
+                    }
+                }
+            }
+
+            uint8_t mods = 0;
+            if(shift) mods |= 1;
+            if(ctrl) mods |= 2;
+            if(alt) mods |= 4;
+            if(fn) mods |= 8;
+            return (mods<<8) | a;
+        }
+
+    } while(!done);
 
     return 0;
 }

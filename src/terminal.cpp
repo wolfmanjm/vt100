@@ -4,10 +4,14 @@
 #include "tinyflash.h"
 #include <EEPROM.h>
 
+// externs
+void kbd_setup();
+uint16_t process_key(bool wait);
+
 //#define TEST
 #define LED 13
 
-// define on command line
+// defines on command line
 //#define USETOUCH
 //#define KEYBOARD
 //#define DEBUG
@@ -94,28 +98,46 @@ void load_touch_fw()
 }
 #endif
 
-// TODO these need to be configurable
+// these are to be configurable
 int baudrate = 9600;
 int rotation = 0; // 1 is portrait
 int font_size = 0;
 uint16_t text_color = RA8875_GREEN;
+bool local_echo = true;
 bool lfcrlf = true; // convert lf to crlf
 bool crcrlf = true; // convert cr to crlf
-bool local_echo = true;
 
-// extern
-void kbd_setup();
-
-void setup()
+void clear_screen()
 {
-#ifdef DEBUG
-    Serial.begin (115200);   // debugging
-    // wait up to 5 seconds for Arduino Serial Monitor
-    unsigned long startMillis = millis();
-    while (!Serial && (millis() - startMillis < 5000)) ;
-    Serial.println("Starting Terminal.");
-#endif
+    tft.fillWindow(RA8875_BLACK);
+    tft.setCursor(0, 0);
+}
 
+void save_settings()
+{
+    EEPROM.write(0, 0xA5);
+    uint8_t br;
+    switch(baudrate) {
+        case 1200:   br= 0; break;
+        case 2400:   br= 1; break;
+        case 4800:   br= 2; break;
+        case 9600:   br= 3; break;
+        case 19200:  br= 4; break;
+        case 115200: br= 5; break;
+        default:     br= 3; break;
+    }
+    EEPROM.write(1, br);
+    EEPROM.write(2, rotation);
+    EEPROM.write(3, font_size);
+    EEPROM.write(4, text_color & 0xFF);
+    EEPROM.write(5, text_color >> 8);
+    EEPROM.write(6, local_echo);
+    EEPROM.write(7, lfcrlf);
+    EEPROM.write(8, crcrlf);
+}
+
+void get_settings()
+{
     // read config settings stored in eeprom
     // first time settings are set will write the defaults and any changes
     uint8_t value = EEPROM.read(0);
@@ -134,13 +156,85 @@ void setup()
         rotation = EEPROM.read(2);
         font_size = EEPROM.read(3);
         text_color = (EEPROM.read(5) << 8) | EEPROM.read(4);
-        lfcrlf = EEPROM.read(6) != 0;
+        local_echo = EEPROM.read(6) != 0;
+        lfcrlf = EEPROM.read(7) != 0;
+        crcrlf = EEPROM.read(8) != 0;
     }
 #ifdef DEBUG
     else {
         Serial.println("No settings found in EEPROM");
     }
 #endif
+}
+
+// command line based setup for now
+void config_setup()
+{
+    clear_screen();
+
+    bool done= false;
+    while(!done) {
+        tft.println("Enter the values to change,\r\nspace skips to next,\r\nq quits");
+        char k;
+
+        tft.print("font size (0,1,2,3) > ");
+        k= process_key(true) & 0xFF; if(k == 'q') break;
+        if(k >= '0' && k <= '3') {
+            font_size= k - '0';
+            tft.setFontScale(font_size);
+            char_width = tft.getFontWidth();
+            char_height = tft.getFontHeight();
+            clear_screen();
+        }
+        tft.println();
+
+        tft.print("rotation (0,1) > ");
+        k= process_key(true) & 0xFF; if(k == 'q') break;
+        if(k >= '0' && k <= '1') {
+            rotation= k - '0';
+            tft.setRotation(rotation);
+            screen_width = tft.width();
+            screen_height = tft.height();
+            char_width = tft.getFontWidth();
+            char_height = tft.getFontHeight();
+            clear_screen();
+        }
+        tft.println();
+
+        tft.print("local Echo (0,1) > ");
+        k= process_key(true) & 0xFF; if(k == 'q') break;
+        if(k >= '0' && k <= '1') {
+            local_echo= (k == '1');
+        }
+        tft.println();
+
+        tft.print("Save (y/n/r) > ");
+        k= process_key(true) & 0xFF; if(k == 'q') break;
+        if(k == 'r') {
+            EEPROM.write(0, 0);
+            tft.println("\r\nSettings restored");
+        } else if(k == 'y') {
+            save_settings();
+            tft.println("\r\nSettings saved");
+        }
+
+        done= true;
+    }
+
+    tft.println("\r\nDone");
+}
+
+void setup()
+{
+#ifdef DEBUG
+    Serial.begin (115200);   // debugging
+    // wait up to 5 seconds for Arduino Serial Monitor
+    unsigned long startMillis = millis();
+    while (!Serial && (millis() - startMillis < 5000)) ;
+    Serial.println("Starting Terminal.");
+#endif
+
+    get_settings();
 
     Serial1.setRX(3);
     Serial1.setTX(4);
@@ -288,11 +382,6 @@ char getcharw()
 #endif
 }
 
-void clearScreen()
-{
-    tft.fillWindow(RA8875_BLACK);
-}
-
 void scroll_up()
 {
     tft.BTE_move(0, char_height, screen_width, screen_height - char_height, 0, 0);
@@ -361,9 +450,6 @@ void move_cursor(char dir, int n)
 
     tft.setCursor(x, y);
 }
-
-// extern
-uint16_t process_key(bool wait);
 
 // do some basic VT100/ansi escape sequence handling
 void process(char data)
@@ -485,7 +571,7 @@ void process(char data)
                     tft.fillRect(0, 0, screen_width, y, RA8875_BLACK);
 
                 } else if (escParam1 == 2) {
-                    clearScreen();
+                    clear_screen();
                 }
             }
             // Esc[K = erase to end of line, Esc[1K = erase to start of line
@@ -602,7 +688,10 @@ void loop()
                 }
 
             } else if(c == 0x8A) { //winkey is clear screen
-                clearScreen();
+                clear_screen();
+
+            } else if(c == 0x85) { // today key goes into setup
+                config_setup();
 
             } else {
                 Serial1.write(c);
@@ -620,7 +709,7 @@ void loop()
     bool dir = false;
 
     while(true) {
-        clearScreen();
+        clear_screen();
         tft.setCursor(0, 0);
 
         tft.println("Once upon a midnight dreary, while I pondered, weak and weary,");
