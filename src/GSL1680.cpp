@@ -18,7 +18,7 @@ pin | function  | Teensy LC
 6   | Gnd       | gnd
 */
 
-#ifdef TOUCH
+#ifdef USETOUCH
 #include <Wire.h>
 #include "Arduino.h"
 

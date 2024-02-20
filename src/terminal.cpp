@@ -8,7 +8,7 @@
 #define LED 13
 
 // define on command line
-//#define TOUCH
+//#define USETOUCH
 //#define KEYBOARD
 //#define DEBUG
 
@@ -37,7 +37,7 @@ RA8875 tft = RA8875(RA8875_CS, RA8875_RESET, 11, 14, 12);
     #define VERIFYFW to check it
     Make sure both are undefined to run program
 */
-#ifdef TOUCH
+#ifdef USETOUCH
 TinyFlash flash;
 uint32_t capacity = 0;
 #endif
@@ -46,7 +46,7 @@ bool has_touch = false;
 uint16_t screen_width, screen_height;
 uint16_t char_width, char_height;
 
-#ifdef TOUCH
+#ifdef USETOUCH
 // externals
 void gsl_final_setup();
 void gsl_setup();
@@ -181,7 +181,7 @@ void setup()
     pinMode(LED, OUTPUT);
     digitalWrite(LED, 0);
 
-#ifdef TOUCH
+#ifdef USETOUCH
     capacity = flash.begin();
 #ifdef DEBUG
     Serial.println(capacity);     // Chip size to host
@@ -237,7 +237,7 @@ void setup()
 #endif
 }
 
-#ifdef TOUCH
+#ifdef USETOUCH
 struct _coord {
     uint32_t x, y;
     uint8_t finger;

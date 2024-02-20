@@ -10,7 +10,7 @@
 // Written by Limor Fried and Phillip Burgess for Adafruit Industries.
 // MIT license.
 
-#ifdef TOUCH
+#ifdef USETOUCH
 #include "tinyflash.h"
 
 #define MYSPI SPI1

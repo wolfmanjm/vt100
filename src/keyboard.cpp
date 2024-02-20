@@ -7,127 +7,71 @@
 #define dcdPin 17
 #define rtsPin 16
 
-static const std::map<uint8_t, char> nslut {
-    {0x8D, '0'},
-    {0xF7, '1'},
-    {0x0D, '2'},
-    {0xD7, '3'},
-    {0x2D, '4'},
-    {0xE7, '5'},
-    {0x1D, '6'},
-    {0xC7, '7'},
-    {0x3D, '8'},
-    {0x77, '9'},
-    {0x57, 'a'},
-    {0xAD, 'b'},
-    {0x67, 'c'},
-    {0x9D, 'd'},
-    {0x47, 'e'},
-    {0xBD, 'f'},
-    {0xB7, 'g'},
-    {0x4D, 'h'},
-    {0x97, 'i'},
-    {0x6D, 'j'},
-    {0xA7, 'k'},
-    {0x5D, 'l'},
-    {0x87, 'm'},
-    {0x7D, 'n'},
-    {0x37, 'o'},
-    {0xCD, 'p'},
-    {0x17, 'q'},
-    {0xED, 'r'},
-    {0x27, 's'},
-    {0xDD, 't'},
-    {0x07, 'u'},
-    {0xFD, 'v'},
-    {0x29, 'w'},
-    {0xEB, 'x'},
-    {0x19, 'y'},
-    {0xCB, 'z'},
-    {0x39, '-'},
-    {0xF3, '='},
-    {0xD3, '['},
-    {0x01, ']'},
-    {0x6B, ';'},
-    {0x99, '\''},
-    {0x4B, ','},
-    {0xB9, '.'},
-    {0x73, '/'},
-    {0x81, '`'},
-    {0xA9, '\\'},
-    {0xB3, '\x7F'},
-
-    // special keys
-    {0x41, 0x81}, // up
-    {0x93, 0x82}, // down
-    {0x2B, 0x83}, // left
-    {0xE9, 0x84}, // right
-
-    {0x79, 0x85}, // today
-    {0xD9, 0x86}, // inbox
-    {0x0B, 0x87}, // contacts
-    {0xF9, 0x88}, // calendar
-    {0x33, 0x89}, // tasks
-    {0x13, 0x8A}, // winkey
-
-    {0xAB, '\r'}, // Enter
-    {0x59, ' '}, // space
-    {0x8B, ' '}, // space
-    {0x53, 9}, // TAB
-    {0xC1, 8}, // BS
-
-};
-
-static const std::map<uint8_t, char> shiftlut {
-    {0x8D, ')'},
-    {0xF7, '!'},
-    {0x0D, '@'},
-    {0xD7, '#'},
-    {0x2D, '$'},
-    {0xE7, '%'},
-    {0x1D, '^'},
-    {0xC7, '&'},
-    {0x3D, '*'},
-    {0x77, '('},
-    {0X57, 'A'},
-    {0XAD, 'B'},
-    {0X67, 'C'},
-    {0X9D, 'D'},
-    {0X47, 'E'},
-    {0XBD, 'F'},
-    {0XB7, 'G'},
-    {0X4D, 'H'},
-    {0X97, 'I'},
-    {0X6D, 'J'},
-    {0XA7, 'K'},
-    {0X5D, 'L'},
-    {0X87, 'M'},
-    {0X7D, 'N'},
-    {0X37, 'O'},
-    {0XCD, 'P'},
-    {0X17, 'Q'},
-    {0XED, 'R'},
-    {0X27, 'S'},
-    {0XDD, 'T'},
-    {0X07, 'U'},
-    {0XFD, 'V'},
-    {0X29, 'W'},
-    {0XEB, 'X'},
-    {0X19, 'Y'},
-    {0XCB, 'Z'},
-
-    {0x39, '_'},
-    {0xF3, '+'},
-    {0xD3, '{'},
-    {0x01, '}'},
-    {0x6B, ':'},
-    {0x99, '\"'},
-    {0x4B, '<'},
-    {0xB9, '>'},
-    {0x73, '?'},
-    {0x81, '~'},
-    {0xA9, '|'},
-
+#define CHARMAPSIZE 63
+PROGMEM static const uint8_t charmap[CHARMAPSIZE][3] = {
+{0x01, ']', '}'},
+{0x07, 'u', 'U'},
+{0x0B, 0x87, 0},
+{0x0D, '2', '@'},
+{0x13, 0x8A, 0},
+{0x17, 'q', 'Q'},
+{0x19, 'y', 'Y'},
+{0x1D, '6', '^'},
+{0x27, 's', 'S'},
+{0x29, 'w', 'W'},
+{0x2B, 0x83, 0},
+{0x2D, '4', '$'},
+{0x33, 0x89, 0},
+{0x37, 'o', 'O'},
+{0x39, '-', '_'},
+{0x3D, '8', '*'},
+{0x41, 0x81, 0},
+{0x47, 'e', 'E'},
+{0x4B, ',', '<'},
+{0x4D, 'h', 'H'},
+{0x53, '\x09', 0},
+{0x57, 'a', 'A'},
+{0x59, ' ', ' '},
+{0x5D, 'l', 'L'},
+{0x67, 'c', 'C'},
+{0x6B, ';', ':'},
+{0x6D, 'j', 'J'},
+{0x73, '/', '?'},
+{0x77, '9', '('},
+{0x79, 0x85, 0},
+{0x7D, 'n', 'N'},
+{0x81, '`', '~'},
+{0x87, 'm', 'M'},
+{0x8B, ' ', ' '},
+{0x8D, '0', ')'},
+{0x93, 0x82, 0},
+{0x97, 'i', 'I'},
+{0x99, '\'', '"'},
+{0x9D, 'd', 'D'},
+{0xA7, 'k', 'K'},
+{0xA9, '\\', '|'},
+{0xAB, '\x0D', 0},
+{0xAD, 'b', 'B'},
+{0xB3, '\x7F', 0},
+{0xB7, 'g', 'G'},
+{0xB9, '.', '>'},
+{0xBD, 'f', 'F'},
+{0xC1, '\x08', 0},
+{0xC7, '7', '&'},
+{0xCB, 'z', 'Z'},
+{0xCD, 'p', 'P'},
+{0xD3, '[', '{'},
+{0xD7, '3', '#'},
+{0xD9, 0x86, 0},
+{0xDD, 't', 'T'},
+{0xE7, '5', '%'},
+{0xE9, 0x84, 0},
+{0xEB, 'x', 'X'},
+{0xED, 'r', 'R'},
+{0xF3, '=', '+'},
+{0xF7, '1', '!'},
+{0xF9, 0x88, 0},
+{0xFD, 'v', 'V'},
 };
 
 void kbd_setup()
@@ -204,6 +148,31 @@ static bool get_key(uint8_t &rk)
     return false;
 }
 
+static int binary_search(uint8_t target) {
+    int left = 0;
+    int right = CHARMAPSIZE - 1;
+
+    while (left <= right) {
+        int mid = left + ((right - left) / 2);
+
+        // Check if target is present at mid
+        if (charmap[mid][0] == target)
+            return mid;
+
+        // If target is greater, ignore left half
+        else if (charmap[mid][0] < target)
+            left = mid + 1;
+
+        // If target is smaller, ignore right half
+        else
+            right = mid - 1;
+    }
+
+    // If target is not present in the array
+    return -1;
+}
+
+
 static bool shift = false;
 static bool ctrl = false;
 static bool alt = false;
@@ -241,26 +210,18 @@ uint16_t process_key(bool wait)
         //               shift, ctrl, alt, fn, caps);
 
         uint8_t a = 0;
-        if(shift) {
-            auto x = shiftlut.find(c);
-            if(x != shiftlut.end()) {
-                a = x->second;
+        int i = binary_search(c);
+        if(i != -1) {
+            if(shift) {
+                a = charmap[i][2];
+                if(a == 0) a= charmap[i][1]; // if no shift just use regular char
+
             } else {
-                auto x = nslut.find(c);
-                if(x != shiftlut.end()) {
-                    a = x->second;
+                a = charmap[i][1];
+                if(ctrl) {
+                    // convert to control character
+                    if(a >= 'a' && a <= '}') a = a - 96;
                 }
-            }
-
-        } else {
-            auto x = nslut.find(c);
-            if(x != nslut.end()) {
-                a = x->second;
-            }
-
-            if(ctrl) {
-                // convert to control character
-                if(a >= 'a' && a <= '}') a = a - 96;
             }
         }
 
