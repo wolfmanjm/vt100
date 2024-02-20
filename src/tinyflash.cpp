@@ -10,6 +10,7 @@
 // Written by Limor Fried and Phillip Burgess for Adafruit Industries.
 // MIT license.
 
+#ifdef TOUCH
 #include "tinyflash.h"
 
 #define MYSPI SPI1
@@ -183,3 +184,4 @@ boolean TinyFlash::writePage(uint32_t addr, uint8_t *data) {
 
 	return true;
 }
+#endif

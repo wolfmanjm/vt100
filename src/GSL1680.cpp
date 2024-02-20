@@ -17,6 +17,8 @@ pin | function  | Teensy LC
 5   | Int       | A8 22
 6   | Gnd       | gnd
 */
+
+#ifdef TOUCH
 #include <Wire.h>
 #include "Arduino.h"
 
@@ -233,3 +235,4 @@ void gsl_setup()
 	Serial.print(buf[0], HEX); Serial.print(","); Serial.print(buf[1], HEX); Serial.print(","); Serial.print(buf[2], HEX); Serial.print(","); Serial.println(buf[3], HEX);
 #endif
 }
+#endif

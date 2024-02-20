@@ -1,12 +1,11 @@
 // Handles the micro keyboard
-
+#ifdef KEYBOARD
 #include <Arduino.h>
-
 #include <map>
 
-#define rxPin  7
-#define dcdPin 8
-#define ctsPin 9
+#define rxPin  15
+#define dcdPin 17
+#define rtsPin 16
 
 static const std::map<uint8_t, char> nslut {
     {0x8D, '0'},
@@ -69,6 +68,7 @@ static const std::map<uint8_t, char> nslut {
     {0x0B, 0x87}, // contacts
     {0xF9, 0x88}, // calendar
     {0x33, 0x89}, // tasks
+    {0x13, 0x8A}, // winkey
 
     {0xAB, '\r'}, // Enter
     {0x59, ' '}, // space
@@ -134,8 +134,8 @@ void kbd_setup()
 {
     pinMode(rxPin, INPUT);
     pinMode(dcdPin, INPUT);
-    pinMode(ctsPin, OUTPUT);
-    digitalWrite(ctsPin, LOW);
+    pinMode(rtsPin, OUTPUT);
+    digitalWrite(rtsPin, LOW);
 }
 
 
@@ -147,12 +147,12 @@ static bool get_key(uint8_t &rk)
     if(digitalRead(dcdPin) == 1) { // wait for it to go high
 
         // acknowledge ready to read
-        digitalWrite(ctsPin, HIGH);
+        digitalWrite(rtsPin, HIGH);
 
         while(digitalRead(dcdPin) == 1) ; // wait for it to go low
 
         // deassert CTS
-        digitalWrite(ctsPin, LOW);
+        digitalWrite(rtsPin, LOW);
 
         bool flg = true;
 
@@ -209,9 +209,9 @@ static bool ctrl = false;
 static bool alt = false;
 static bool fn = false;
 static bool caps = false;
-static bool wkey = false;
 
-char process_key(bool wait)
+// returns processed char in low 8bits, and modifiers in upper 8 bits.
+uint16_t process_key(bool wait)
 {
     uint8_t c;
     if(wait) {
@@ -226,7 +226,6 @@ char process_key(bool wait)
     else if(c == 0x7F) ctrl = true;
     else if(c == 0xDF) alt = true;
     else if(c == 0xBF) fn = true;
-    else if(c == 0x13) wkey = true;
     else if(c == 0xC6) shift = false;
     else if(c == 0x86) ctrl = false;
     else if(c == 0x26) alt = false;
@@ -234,14 +233,14 @@ char process_key(bool wait)
     else if(c == 0x69) caps = !caps;
 
     else if(c == 0x5E) {
-        if(wkey) wkey = false;
+        // released normal key
 
     } else {
         // Serial.printf("keycode= %02X", c);
-        // Serial.printf(" - shift:%d, ctrl:%d, alt:%d, fn:%d, caps:%d, wkey:%d\n",
-        //               shift, ctrl, alt, fn, caps, wkey);
+        // Serial.printf(" - shift:%d, ctrl:%d, alt:%d, fn:%d, caps:%d\n",
+        //               shift, ctrl, alt, fn, caps);
 
-        char a = 0;
+        uint8_t a = 0;
         if(shift) {
             auto x = shiftlut.find(c);
             if(x != shiftlut.end()) {
@@ -265,11 +264,15 @@ char process_key(bool wait)
             }
         }
 
-        // if(a < ' ' || a >= 0x80) Serial.printf("\\x%02X\n", a);
-        // else if(a >= ' ') Serial.printf("%c\n", a);
-        return a;
+        uint8_t mods = 0;
+        if(shift) mods |= 1;
+        if(ctrl) mods |= 2;
+        if(alt) mods |= 4;
+        if(fn) mods |= 8;
+        return (mods<<8) | a;
     }
 
     return 0;
 }
 
+#endif

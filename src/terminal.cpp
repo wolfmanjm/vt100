@@ -1,11 +1,16 @@
+#include <Arduino.h>
 #include <SPI.h>
 #include <RA8875.h>
 #include "tinyflash.h"
 #include <EEPROM.h>
 
 //#define TEST
-//#define DEBUG
 #define LED 13
+
+// define on command line
+//#define TOUCH
+//#define KEYBOARD
+//#define DEBUG
 
 #define FW_SOURCE_LEN 5478
 
@@ -32,12 +37,16 @@ RA8875 tft = RA8875(RA8875_CS, RA8875_RESET, 11, 14, 12);
     #define VERIFYFW to check it
     Make sure both are undefined to run program
 */
+#ifdef TOUCH
 TinyFlash flash;
 uint32_t capacity = 0;
+#endif
+
 bool has_touch = false;
 uint16_t screen_width, screen_height;
 uint16_t char_width, char_height;
 
+#ifdef TOUCH
 // externals
 void gsl_final_setup();
 void gsl_setup();
@@ -83,13 +92,18 @@ void load_touch_fw()
     tft.println("...Loaded Touch FIRMWARE");
     gsl_final_setup();
 }
+#endif
 
+// TODO these need to be configurable
 int baudrate = 9600;
 int rotation = 0; // 1 is portrait
 int font_size = 0;
 uint16_t text_color = RA8875_GREEN;
 bool lfcrlf = true; // convert lf to crlf
+bool crcrlf = true; // convert cr to crlf
+bool local_echo = true;
 
+// extern
 void kbd_setup();
 
 void setup()
@@ -107,7 +121,7 @@ void setup()
     uint8_t value = EEPROM.read(0);
     if(value == 0xA5) {
         // configs have been stored
-        value= EEPROM.read(1);
+        value = EEPROM.read(1);
         switch(value) {
             case 0: baudrate = 1200; break;
             case 1: baudrate = 2400; break;
@@ -138,6 +152,7 @@ void setup()
 
     tft.setFontScale(font_size); //font x1
 
+
     screen_width = tft.width();
     screen_height = tft.height();
     char_width = tft.getFontWidth();
@@ -158,11 +173,15 @@ void setup()
     //now set a text color, background transparent
     tft.println("Starting up...");
 
+#ifdef KEYBOARD
     // setup the micro keyboard
     kbd_setup();
+#endif
 
     pinMode(LED, OUTPUT);
     digitalWrite(LED, 0);
+
+#ifdef TOUCH
     capacity = flash.begin();
 #ifdef DEBUG
     Serial.println(capacity);     // Chip size to host
@@ -180,6 +199,7 @@ void setup()
         digitalWrite(LED, 0);
         has_touch = false;
     }
+#endif
 
     // set text color to green
     tft.setTextColor(text_color);
@@ -217,6 +237,7 @@ void setup()
 #endif
 }
 
+#ifdef TOUCH
 struct _coord {
     uint32_t x, y;
     uint8_t finger;
@@ -247,6 +268,7 @@ uint32_t lastx, lasty;
 struct _coord last_coords[5] = {0};
 int nf = 0;
 bool last_finger_down[5] = {false};
+#endif
 
 // wait for char and return it
 char getcharw()
@@ -285,9 +307,63 @@ void scroll_down()
     tft.fillRect(0, 0, screen_width, char_height, RA8875_BLACK);
 }
 
+void move_cursor(char dir, int n)
+{
+    int16_t currentX, currentY;
+    tft.getCursor(currentX, currentY);
+    int16_t x = currentX, y = currentY;
+    switch(dir) {
+        case 'A':
+            // moves cursor up n lines
+            y = currentY - (n * char_height);
+            if(y < 0) y = 0;
+            break;
+
+        case 'B':
+            // moves cursor down n lines
+            y = currentY + (n * char_height);
+            if(y >= screen_height) y = screen_height - char_height;
+            break;
+
+        case 'C':
+            // cursor right n characters
+            x = currentX + (n * char_width);
+            if(x >= screen_width) x = screen_width - char_width;
+            break;
+
+        case 'D':
+            // moves cursor left n characters
+            x = currentX - (n * char_width);
+            if(x < 0) x = 0;
+            break;
+
+        case 'E':
+            // moves cursor to start of n next lines
+            x = 0;
+            y = currentY + (n * char_height);
+            if(y >= screen_height) y = screen_height - char_height;
+            break;
+
+        case 'F':
+            // moves cursor to start of n previous lines
+            x = 0;
+            y = currentY - (n * char_height);
+            if(y < 0) y = 0;
+            break;
+
+        case 'G':
+            // moves cursor to column n
+            --n;
+            x = (n * char_width);
+            if(x >= screen_width) x = screen_width - char_width;
+            break;
+    }
+
+    tft.setCursor(x, y);
+}
+
 // extern
-char process_key(bool wait);
-bool local_echo= true;
+uint16_t process_key(bool wait);
 
 // do some basic VT100/ansi escape sequence handling
 void process(char data)
@@ -296,25 +372,28 @@ void process(char data)
     if (data == '\r') {
         // start of current line
         tft.getCursor(currentX, currentY);
-        tft.setCursor(0, currentY);
+        int16_t x = 0;
+        int16_t y = currentY;
+        if(crcrlf) y += char_height; // if CR is converted to CRLF
+        tft.setCursor(x, y);
 
     } else if (data == '\n') {
         // next line, potentially scroll
         tft.getCursor(currentX, currentY);
-        int16_t x= currentX;
+        int16_t x = currentX;
         int16_t y = currentY + char_height;
         if(y >= screen_height) {
             scroll_up();
             y = screen_height - char_height;
         }
-        if(lfcrlf) x= 0; // if LF is converted to CRLF
+        if(lfcrlf) x = 0; // if LF is converted to CRLF
         tft.setCursor(x, y);
 
     } else if (data == 8) { // BS
         // backspace move cursor left one
         tft.getCursor(currentX, currentY);
-        uint16_t x= currentX-char_width;
-        if(x < 0) x= 0;
+        uint16_t x = currentX - char_width;
+        if(x < 0) x = 0;
         tft.setCursor(x, currentY);
 
     } else if (data == 27) { // ESC
@@ -348,63 +427,22 @@ void process(char data)
                 }
             }
 
-            #ifdef DEBUG
+#ifdef DEBUG
             Serial.printf("Esc[ escP1: %d, escP2: %d, %c\n", escParam1, escParam2, serInChar);
-            #endif
+#endif
 
             if(serInChar >= 'A' && serInChar <= 'G') {
                 // Handle cursor incremental move commands
                 tft.getCursor(currentX, currentY);
-                int16_t x= currentX, y= currentY;
-                if (escParam1 < 1) escParam1= 1;
-                switch(serInChar) {
-                    case 'A':
-                        // Esc[nA moves cursor up n lines
-                        y = currentY - (escParam1 * char_height);
-                        if(y < 0) y= 0;
-                        break;
-
-                    case 'B':
-                        // Esc[nB moves cursor down n lines
-                        y = currentY + (escParam1 * char_height);
-                        if(y >= screen_height) y= screen_height - char_height;
-                        break;
-
-                    case 'C':
-                        // Esc[nC moves cursor right n characters
-                        x = currentX + (escParam1 * char_width);
-                        if(x >= screen_width) x= screen_width - char_width;
-                        break;
-
-                    case 'D':
-                        // Esc[nD moves cursor left n characters
-                        x = currentX - (escParam1 * char_width);
-                        if(x < 0) x= 0;
-                        break;
-
-                    case 'E':
-                        // Esc[nE moves cursor to start of n next lines
-                        x= 0;
-                        y = currentY + (escParam1 * char_height);
-                        if(y >= screen_height) y= screen_height - char_height;
-                        break;
-
-                    case 'F':
-                        // Esc[nF moves cursor to start of n previous lines
-                        x= 0;
-                        y = currentY - (escParam1 * char_height);
-                        if(y < 0) y= 0;
-                        break;
-
-                    case 'G':
-                        // Esc[nG moves cursor to column n
-                        --escParam1;
-                        x = (escParam1 * char_width);
-                        if(x >= screen_width) x= screen_width - char_width;
-                        break;
-                }
-
-                tft.setCursor(x, y);
+                if (escParam1 < 1) escParam1 = 1;
+                // Esc[nA moves cursor up n lines
+                // Esc[nB moves cursor down n lines
+                // Esc[nC moves cursor right n characters
+                // Esc[nD moves cursor left n characters
+                // Esc[nE moves cursor to start of n next lines
+                // Esc[nF moves cursor to start of n previous lines
+                // Esc[nG moves cursor to column n
+                move_cursor(serInChar, escParam1);
             }
             // Esc[line;ColumnH or Esc[line;Columnf moves cursor to that coordinate
             else if (serInChar == 'H' || serInChar == 'f') {
@@ -479,14 +517,14 @@ void process(char data)
             }
             // Esc[nT = scroll down. optional n is number of lines to scroll
             else if (serInChar == 'T') {
-                if (escParam1 == 0) escParam1= 1;
+                if (escParam1 == 0) escParam1 = 1;
                 for (int i = 0; i < escParam1; ++i) {
                     scroll_down();
                 }
             }
             // Esc[nS = scroll up. optional n is number of lines to scroll
             else if (serInChar == 'S') {
-                if (escParam1 == 0) escParam1= 1;
+                if (escParam1 == 0) escParam1 = 1;
                 for (int i = 0; i < escParam1; ++i) {
                     scroll_up();
                 }
@@ -512,6 +550,11 @@ void process(char data)
     }
 }
 
+void doreset()
+{
+
+}
+
 // read data from UART and display
 // process VT100 escape sequences
 void loop()
@@ -529,15 +572,49 @@ void loop()
         process(data);
     }
 
+#ifdef KEYBOARD
     // get a key from the keyboard
-    char c= process_key(false);
+    uint16_t c = process_key(false);
+
+    uint8_t mods = c >> 8; // modifier keys
     if(c != 0) {
-        Serial1.write(c);
-        if(local_echo) {
-            if(c < ' ' || c >= 0x80) tft.printf("\\x%02X", c);
-            else if(c >= ' ') tft.printf("%c", c);
+        #ifdef DEBUG
+        Serial.printf("Got key %04X\n", c);
+        #endif
+
+        c = c & 0xFF;
+        if((mods & 0x06) == 0x06 && c == 0x7F) {
+            // we have ctrl-alt-del
+            doreset();
+        } else {
+            char ansic = 0;
+            if(c == 0x81) ansic = 'A'; // up
+            else if(c == 0x82) ansic = 'B'; // down
+            else if(c == 0x83) ansic = 'D'; // left
+            else if(c == 0x84) ansic = 'C'; // right
+            if(ansic != 0) {
+                // send ansi cursor sequence
+                Serial1.write(27); // ESC
+                Serial1.write('[');
+                Serial1.write(ansic);
+                if(local_echo) {
+                    move_cursor(ansic, 1);
+                }
+
+            } else if(c == 0x8A) { //winkey is clear screen
+                clearScreen();
+
+            } else {
+                Serial1.write(c);
+                if(local_echo) {
+                    if(c == '\r' || c == '\n' || c == 8) process(c);
+                    else if(c < ' ' || c >= 0x80) tft.printf("\\x%02X", c);
+                    else if(c >= ' ') tft.printf("%c", c);
+                }
+            }
         }
     }
+#endif
 
 #ifdef TEST
     bool dir = false;
